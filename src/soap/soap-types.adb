@@ -1,7 +1,7 @@
 ------------------------------------------------------------------------------
 --                              Ada Web Server                              --
 --                                                                          --
---                     Copyright (C) 2000-2018, AdaCore                     --
+--                     Copyright (C) 2000-2019, AdaCore                     --
 --                                                                          --
 --  This library is free software;  you can redistribute it and/or modify   --
 --  it under terms of the  GNU General Public License  as published by the  --
@@ -791,6 +791,8 @@ package body SOAP.Types is
 
    overriding function Image (O : XSD_Time_Instant) return String is
 
+      use type GNAT.Calendar.Time_IO.Picture_String;
+
       function Image
         (Timezone : Calendar.Time_Zones.Time_Offset) return String;
       --  Returns Image for the TZ
@@ -839,8 +841,14 @@ package body SOAP.Types is
          end if;
       end Image;
 
+      Has_Sub_Second : constant Boolean :=
+                         GNAT.Calendar.Sub_Second (O.T) /= 0.0;
+
+      Format         : constant GNAT.Calendar.Time_IO.Picture_String :=
+                         "%Y-%m-%dT%H:%M:%S"
+                         & (if Has_Sub_Second then ".%i" else "");
    begin
-      return GNAT.Calendar.Time_IO.Image (O.T, "%Y-%m-%dT%H:%M:%S")
+      return GNAT.Calendar.Time_IO.Image (O.T, Format)
         & Image (Calendar.Time_Zones.UTC_Time_Offset (O.T));
    end Image;
 
@@ -989,12 +997,15 @@ package body SOAP.Types is
    -- N --
    -------
 
-   function N (Name : String  := "item") return XSD_Null is
+   function N
+     (Name      : String;
+      Type_Name : String;
+      NS        : SOAP.Name_Space.Object := SOAP.Name_Space.No_Name_Space)
+      return XSD_Null is
    begin
       return
         (Finalization.Controlled
-         with To_Unbounded_String (Name), Null_Unbounded_String,
-              No_Name_Space);
+         with To_Unbounded_String (Name), To_Unbounded_String (Type_Name), NS);
    end N;
 
    ----------
@@ -1470,7 +1481,11 @@ package body SOAP.Types is
       Append (Result, Tag_Name (OC));
 
       if Encoding = WSDL.Schema.Encoded then
-         Append (Result, " xsi_null=""1""");
+         if XML_Type (OC) /= "" then
+            Append (Result, xsi_type (XML_Type (OC)));
+         end if;
+
+         Append (Result, " xsi:nil=""true""");
       end if;
 
       Append (Result, "/>");
@@ -1715,12 +1730,6 @@ package body SOAP.Types is
    overriding function XML_Type (O : XSD_Any_Type) return String is
    begin
       return XML_Type (O.O.O.all);
-   end XML_Type;
-
-   overriding function XML_Type (O : XSD_Null) return String is
-      pragma Unreferenced (O);
-   begin
-      return XML_Null;
    end XML_Type;
 
    --------------
