@@ -1,7 +1,7 @@
 ------------------------------------------------------------------------------
 --                              Ada Web Server                              --
 --                                                                          --
---                     Copyright (C) 2000-2019, AdaCore                     --
+--                     Copyright (C) 2000-2020, AdaCore                     --
 --                                                                          --
 --  This library is free software;  you can redistribute it and/or modify   --
 --  it under terms of the  GNU General Public License  as published by the  --
@@ -29,13 +29,14 @@
 
 pragma Ada_2012;
 
+with Ada.Calendar.Arithmetic;
 with Ada.Calendar.Formatting;
 with Ada.Calendar.Time_Zones;
 
 with Ada.Calendar;
 with Ada.Characters.Handling;
 with Ada.Strings.Fixed;
-with Ada.Strings.Maps;
+with Ada.Strings.Maps.Constants;
 with Ada.Unchecked_Deallocation;
 
 with Unicode.CES.Basic_8bit;
@@ -73,6 +74,130 @@ package body SOAP.Utils is
    begin
       return Types.S (String'(1 => V), Name, Type_Name, NS);
    end C;
+
+   --------------
+   -- Duration --
+   --------------
+
+   function Duration
+     (D, Name   : String;
+      Type_Name : String := Types.XML_Duration)
+      return Types.XSD_Duration
+   is
+      use Ada;
+      use Ada.Calendar;
+      use Ada.Calendar.Arithmetic;
+
+      use type Strings.Maps.Character_Set;
+
+      subtype S_Duration is Standard.Duration;
+
+      Numeric_Set : constant Strings.Maps.Character_Set :=
+                      Strings.Maps.Constants.Decimal_Digit_Set
+                      or Strings.Maps.To_Set (".");
+
+      Minute    : constant := 60;
+      Hour      : constant := 60 * Minute;
+
+      Base      : constant Calendar.Time := Calendar.Clock;
+      Negative  : constant Boolean := D (D'First) = '-';
+
+      Next      : Calendar.Time;
+      B_Year    : Calendar.Year_Number;
+      B_Month   : Positive;
+      B_Day     : Calendar.Day_Number;
+      B_Seconds : Standard.Duration;
+
+      Time_Mode : Boolean := False;
+      N_Day     : Calendar.Arithmetic.Day_Count := 0;
+      Seconds   : S_Duration := 0.0;
+      K         : Positive := D'First + (if Negative then 2 else 1);
+      L         : Natural;
+
+   begin
+      Calendar.Split (Base, B_Year, B_Month, B_Day, B_Seconds);
+
+      --  Parse XSD duration
+
+      while K < D'Last loop
+         --  Time separator found, skip it
+
+         if D (K) = 'T' then
+            Time_Mode := True;
+            K := K + 1;
+         end if;
+
+         --  Check for next non-digit character, all chunk are <n>[K] where
+         --  K is a letter specifiying the actual part of the duration.
+
+         L := Strings.Fixed.Index
+           (D,
+            From => K,
+            Set  => Numeric_Set,
+            Test => Strings.Outside);
+
+         exit when L = 0;
+
+         declare
+            Value : constant S_Duration :=  S_Duration'Value (D (K .. L - 1));
+            Key   : constant Character := D (L);
+         begin
+            case Key is
+               when 'Y' =>
+                  B_Year := B_Year + Natural (Value);
+
+               when 'M' =>
+                  if Time_Mode then
+                     Seconds := Seconds + S_Duration (Value * Minute);
+
+                  else
+                     B_Month := B_Month + Natural (Value);
+
+                     while B_Month > 12 loop
+                        B_Year := B_Year + 1;
+                        B_Month := B_Month - 12;
+                     end loop;
+                  end if;
+
+               when 'D' =>
+                  N_Day := Calendar.Arithmetic.Day_Count (Value);
+
+               when 'H' =>
+                  Seconds := Seconds + Value * Hour;
+
+               when 'S' =>
+                  Seconds := Seconds + Value;
+
+               when others =>
+                  null;
+            end case;
+         end;
+
+         K := L + 1;
+      end loop;
+
+      --  Now compute the date startinig from base and adding the duration
+
+      --  First we take into accound the Year and Month and keep the other
+      --  parameters.
+
+      Next := Calendar.Time_Of (B_Year, B_Month, B_Day, B_Seconds);
+
+      --  Then we need to add the Second and Day count
+
+      Next := Next + N_Day;
+      Next := Next + Seconds;
+
+      declare
+         Result : Standard.Duration := Next - Base;
+      begin
+         if Negative then
+            Result := -Result;
+         end if;
+
+         return Types.D (Result, Name, Type_Name);
+      end;
+   end Duration;
 
    ------------
    -- Encode --
