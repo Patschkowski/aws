@@ -1,7 +1,7 @@
 ------------------------------------------------------------------------------
 --                              Ada Web Server                              --
 --                                                                          --
---                     Copyright (C) 2000-2019, AdaCore                     --
+--                     Copyright (C) 2000-2020, AdaCore                     --
 --                                                                          --
 --  This library is free software;  you can redistribute it and/or modify   --
 --  it under terms of the  GNU General Public License  as published by the  --
@@ -28,11 +28,11 @@
 ------------------------------------------------------------------------------
 
 with Ada.Characters.Handling;
-with Ada.Directories;
 with Ada.Environment_Variables;
 
 with AWS.Config.Ini;
 with AWS.OS_Lib;
+with AWS.Utils;
 
 package body AWS.Config is
 
@@ -45,9 +45,9 @@ package body AWS.Config is
    Ini_Loaded : Boolean := False;
    --  Set to True when initialization (.ini) files have been loaded
 
-   procedure Read_If_Present (Filename : String);
+   procedure Read_Or_Ignore (Filename : String);
    --  Read and parse Filename, does not raise an exception if the file does
-   --  not exists.
+   --  not exists or can't be read.
 
    -----------------------
    -- Accept_Queue_Size --
@@ -236,6 +236,15 @@ package body AWS.Config is
    begin
       return To_String (O.P (Directory_Browser_Page).Str_Value);
    end Directory_Browser_Page;
+
+   -------------------------
+   -- Disable_Program_Ini --
+   -------------------------
+
+   function Disable_Program_Ini return Boolean is
+   begin
+      return Process_Options (Disable_Program_Ini).Bool_Value;
+   end Disable_Program_Ini;
 
    ----------------
    -- Down_Image --
@@ -427,11 +436,14 @@ package body AWS.Config is
 
    procedure Load_Config is
    begin
-      Read_If_Present
+      Read_Or_Ignore
         (Config_Directory & OS_Lib.Directory_Separator & "aws.ini");
-      Read_If_Present ("aws.ini");
-      Read_If_Present (Ini.Program_Ini_File (Full_Path => True));
-      Read_If_Present (Ini.Program_Ini_File (Full_Path => False));
+      Read_Or_Ignore ("aws.ini");
+
+      if not Disable_Program_Ini then
+         Read_Or_Ignore (Ini.Program_Ini_File (Full_Path => True));
+         Read_Or_Ignore (Ini.Program_Ini_File (Full_Path => False));
+      end if;
    end Load_Config;
 
    -------------------
@@ -571,16 +583,20 @@ package body AWS.Config is
       return To_String (O.P (Protocol_Family).Str_Value);
    end Protocol_Family;
 
-   ---------------------
-   -- Read_If_Present --
-   ---------------------
+   --------------------
+   -- Read_Or_Ignore --
+   --------------------
 
-   procedure Read_If_Present (Filename : String) is
+   procedure Read_Or_Ignore (Filename : String) is
    begin
-      if Directories.Exists (Filename) then
+      if Utils.Is_Regular_File (Filename) then
          Ini.Read (Server_Config, Filename);
       end if;
-   end Read_If_Present;
+
+   exception
+      when others =>
+         null;
+   end Read_Or_Ignore;
 
    ---------------------
    -- Receive_Timeout --

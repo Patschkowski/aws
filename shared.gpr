@@ -81,7 +81,7 @@ abstract project Shared is
    ------------------------
 
    XMLAda : Install_Status := external ("PRJ_XMLADA", "Installed");
-   ASIS   : Install_Status := external ("PRJ_ASIS", "Installed");
+   LAL    : Install_Status := external ("PRJ_LAL", "Installed");
    LDAP   : Install_Status := external ("PRJ_LDAP", "Installed");
 
    --------------------
@@ -90,6 +90,7 @@ abstract project Shared is
 
    Adaflags := External_As_List ("ADAFLAGS", " ");
    Cflags   := External_As_List ("CFLAGS", " ");
+   Cppflags := External_As_List ("CPPFLAGS", " ");
    Ldflags  := External_As_List ("LDFLAGS", " ");
 
    ---------
@@ -141,6 +142,7 @@ abstract project Shared is
             for Default_Switches ("Ada") use Common_Options & Release_Options;
             for Default_Switches ("C")
               use ("-O2", "-Wno-implicit-function-declaration");
+
       end case;
 
       case S_Target is
@@ -157,7 +159,7 @@ abstract project Shared is
       for Default_Switches ("Ada") use
         Compiler'Default_Switches ("Ada") & Adaflags;
       for Default_Switches ("C") use
-        Compiler'Default_Switches ("C") & Cflags;
+        Compiler'Default_Switches ("C") & Cflags & Cppflags;
 
    end Compiler;
 
